@@ -146,7 +146,7 @@
     - 支持对话历史管理
     - 平均每个用户查询可能需要 2-3 次 API 调用（由于 240ms 暂停重触发机制）
 
-### 语音模型（本地部署）
+### 语音模型（本地部署）=
 *   **ASR (语音识别):**
     - 模型: Riva ASR `parakeet-ctc-1.1b` 英文模型
     - 特点:
@@ -178,3 +178,63 @@
    - 使用 gRPC APIs 实现流式低延迟语音服务
    - 支持 REST APIs 用于纯文本聊天机器人
    - 支持与 LangChain、LlamaIndex 等框架的集成 
+
+## 9. 支持日语的修改分析
+
+本章节分析了在当前 Docker Compose 部署的 `llm_bot` 基础上，支持日语交互所需的修改步骤和注意事项。
+
+### 核心策略
+
+ACE Agent 支持多语言部署，但一个实例通常配置为处理一种主要语言。支持日语主要有两种策略：
+
+1.  **使用多语言或日语 LLM:** 直接使用能理解和生成日语的 LLM 模型。
+2.  **使用神经机器翻译 (NMT):** 将日语输入翻译成 LLM 能理解的语言（如英语），然后将 LLM 的回复翻译回日语。
+
+### 具体修改步骤 (基于 Docker Compose)
+
+1.  **检查并部署日语 Riva 模型:**
+    *   **ASR (语音识别):**
+        *   检查 Riva 文档或 NGC 目录确认是否有可用的日语 ASR 模型 (例如 `ja-JP` 相关模型)。
+        *   如果找到，修改 `model-utils-speech` 服务的配置（如 `docker_init.sh` 或 `docker-compose.yml`），将英文 ASR 模型替换为日语模型。
+    *   **TTS (语音合成):**
+        *   检查 Riva 是否提供日语 TTS 模型和语音名称。
+        *   如果找到，修改 `model-utils-speech` 配置，替换英文 TTS 模型为日语模型。
+        *   **替代方案:** 如果 Riva 不支持日语 TTS，可考虑集成第三方 TTS 服务 (如 ElevenLabs)，需修改 `nlp-server`。
+    *   **NMT (神经机器翻译 - 如果采用策略 2):**
+        *   检查 Riva 是否提供支持日语翻译的 NMT 模型。
+        *   如果选择 NMT 策略，需将 NMT 模型添加到 `model-utils-speech` 的部署列表中。
+
+2.  **修改 Chat Controller 配置:**
+    *   **文件:** `ACE/microservices/ace_agent/4.1/deploy/docker/docker-compose.yml` 中 `chat-controller` 服务的环境变量或其引用的配置文件。
+    *   **ASR 语言:** 修改相关配置项 (如 `RIVA_ASR_LANGUAGE_CODE`) 从 `"en-US"` 改为 `"ja-JP"`。
+    *   **TTS 语言和语音:** 修改相关配置项 (如 `RIVA_TTS_LANGUAGE_CODE` 和 `RIVA_TTS_VOICE_NAME`) 为日语代码和可用的语音名称。
+
+3.  **修改 LLM 配置或 Bot 逻辑 (`actions.py`):**
+    *   **策略 1 (使用日语/多语言 LLM):**
+        *   **文件:** `ACE/microservices/ace_agent/4.1/samples/llm_bot/actions.py`
+        *   修改 `MODEL` 变量为支持日语的 LLM 标识符。
+        *   如果需要，更新 `BASE_URL` 和认证方式。
+        *   调整 `SYSTEM_PROMPT`。
+    *   **策略 2 (使用 NMT):**
+        *   **文件:** `ACE/microservices/ace_agent/4.1/samples/llm_bot/actions.py`
+        *   保持 LLM 配置不变。
+        *   修改 `call_nim_local_llm` action：
+            *   在调用 LLM 前，调用 Riva NMT 将日语查询翻译成英文。
+            *   使用翻译后的英文调用 LLM。
+            *   在返回结果前，调用 Riva NMT 将 LLM 的英文回复翻译回日语。
+            *   这需要了解如何通过 gRPC 调用 Riva NMT 服务。
+
+4.  **重建并重启服务：**
+    *   修改配置和代码后，停止现有服务:
+        ```bash
+        cd /home/cho/workspace/ACE/microservices/ace_agent/4.1 && docker compose -f deploy/docker/docker-compose.yml down
+        ```
+    *   根据新的模型配置更新 `docker_init.sh` (如果需要)，然后重新启动服务:
+        ```bash
+        cd /home/cho/workspace/ACE/microservices/ace_agent/4.1 && export BOT_PATH=./samples/llm_bot/ && source deploy/docker/docker_init.sh && docker compose -f deploy/docker/docker-compose.yml up --build speech-event-bot -d
+        ```
+
+### 重要注意事项
+*   **模型可用性:** 确认 Riva 是否提供高质量的日语 ASR 和 TTS 模型是关键。
+*   **LLM 能力:** 当前使用的 Llama3 8B 可能不足以很好地处理日语，需要选择合适的多语言或日语 LLM。
+*   **单语言实例:** 修改后，该部署实例将主要处理日语。 
