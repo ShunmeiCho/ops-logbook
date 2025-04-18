@@ -1,6 +1,6 @@
 # Ops-Logbook: 多语言运维操作日志库
 
-![License](https://img.shields.io/github/license/username/ops-logbook)
+![License](https://img.shields.io/badge/license-MIT-green)
 ![Languages](https://img.shields.io/badge/Languages-EN%20|%20ZH%20|%20JA-blue)
 
 ## 项目概述
