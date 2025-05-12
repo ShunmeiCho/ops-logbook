@@ -178,17 +178,23 @@
 
 **b. 创建新的 Swap 文件 (在 NVMe SSD 上):**
 
-- **决策:** 确定 Swap 文件路径。鉴于根目录 `/` 已在 NVMe SSD，建议路径为 `/16GB_swapfile`。
+- **决策:** 确定 Swap 文件路径为 `/16GB_swapfile`。
 - **操作规划1 (创建文件):**
   ```bash
   sudo fallocate -l 16G /16GB_swapfile
   ```
-- **操作规划2 (设置权限，可选但推荐):**
+- **操作规划2 (设置权限):**
   ```bash
   sudo chmod 600 /16GB_swapfile
   ```
-- **预期影响:** 在 NVMe SSD 上预分配一个 16GB 的文件作为 swap 空间。
-- **记录:** (将在实际操作后记录执行的命令和选择的路径)
+- **记录 (2025年05月09日 - 创建Swap文件):**
+    - **已执行命令:**
+      ```bash
+      dtc@ubuntu:~/workspace$ sudo fallocate -l 16G /16GB_swapfile
+      [sudo] dtc のパスワード: 
+      dtc@ubuntu:~/workspace$ sudo chmod 600 /16GB_swapfile
+      ```
+    - **分析:** `fallocate` 命令成功执行 (在输入正确密码后)，预分配了16GB空间。`chmod 600` 命令成功设置了文件权限，确保只有root用户可读写。
 
 **c. 格式化并激活 Swap 文件:**
 
@@ -200,18 +206,48 @@
   ```bash
   sudo swapon /16GB_swapfile
   ```
-- **预期影响:** 新的 16GB swap 空间被系统识别并立即启用。
-- **记录:** (将在实际操作后记录执行的命令、命令输出)
+- **记录 (2025年05月09日 - 格式化并激活Swap):**
+    - **已执行命令及输出:**
+      ```bash
+      dtc@ubuntu:~/workspace$ sudo mkswap /16GB_swapfile
+      スワップ空間バージョン 1 を設定します。サイズ = 16 GiB (17179865088 バイト)
+      ラベルはありません, UUID=75e6a628-abd9-4002-937f-40cd6c6368ab
+      dtc@ubuntu:~/workspace$ sudo swapon /16GB_swapfile
+      ```
+    - **分析:** `mkswap` 命令成功将文件格式化为Swap空间，并分配了UUID。`swapon` 命令成功激活了该Swap文件。此时可以使用 `swapon -s` 或 `free -h` 验证。
 
 **d. 使 Swap 文件永久生效 (修改 `/etc/fstab`):**
 
-- **操作规划 (推荐的安全方法):**
+- **操作规划 (安全方法):**
   ```bash
   echo '/16GB_swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
   ```
-- **验证规划 (可选):** `cat /etc/fstab` 查看是否已添加。
-- **预期影响:** 系统重启后会自动挂载并使用 `/16GB_swapfile` 作为 swap。
-- **记录:** (将在实际操作后记录执行的命令，以及 `/etc/fstab` 添加后的内容)
+- **验证规划:** `cat /etc/fstab`
+- **记录 (2025年05月09日 - 修改fstab并处理重复条目):**
+    - **已执行命令 (添加条目):**
+      ```bash
+      dtc@ubuntu:~/workspace$ echo '/16GB_swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+      [sudo] dtc のパスワード: 
+      /16GB_swapfile none swap sw 0 0
+      ```
+    - **已执行命令 (验证fstab):**
+      ```bash
+      dtc@ubuntu:~/workspace$ cat /etc/fstab
+      # /etc/fstab: static file system information.
+      #
+      # These are the filesystems that are always mounted on boot, you can
+      # override any of these by copying the appropriate line from this file into
+      # /etc/fstab and tweaking it as you see fit.  See fstab(5).
+      #
+      # <file system> <mount point>             <type>          <options>                               <dump> <pass>
+      /dev/root            /                     ext4           defaults                                     0 1
+      /16GB_swapflie  none  swap  sw 0  0  # (注意: 此处有一个拼写错误 'swapflie'，实际添加的是 'swapfile')
+      /16GB_swapfile none swap sw 0 0
+      ```
+    - **问题发现与处理:**
+        - `cat /etc/fstab` 的输出显示 `/16GB_swapfile none swap sw 0 0` 条目被添加了两次。
+        - (用户后续反馈) 用户已使用 `vi` 编辑器手动打开 `/etc/fstab` 并删除了其中一个重复的 `/16GB_swapfile none swap sw 0 0` 条目，以确保配置文件的正确性和整洁性。同时，用户也修正了之前可能存在的 `/16GB_swapflie` 拼写错误（如果存在）。
+        - **最终状态:** `/etc/fstab` 中现在应该只有一行正确的 `/16GB_swapfile none swap sw 0 0` 条目。
 
 #### 步骤 2.4: 重启系统使初步优化生效
 
@@ -219,8 +255,43 @@
   ```bash
   sudo reboot
   ```
-- **预期影响:** 应用所有之前的更改 (GUI禁用, nvargus禁用, 新Swap配置)。
-- **记录:** (将在实际操作后记录重启后，通过 `free -h` 和 `swapon -s` 验证内存和新 swap 状态)
+- **记录 (2025年05月12日 - 重启后验证):**
+    - **已执行命令:** `sudo reboot`
+    - **重启后执行的验证命令及输出:**
+        1.  `free -h`
+            ```
+            dtc@ubuntu:~/workspace$ free -h
+                           total        used        free      shared  buff/cache   available
+            Mem:           7.4Gi       806Mi       5.9Gi        34Mi       770Mi       6.4Gi
+            Swap:           15Gi          0B        15Gi
+            ```
+        2.  `swapon -s`
+            ```
+            dtc@ubuntu:~/workspace$ swapon -s
+            Filename                                Type            Size            Used            Priority
+            /16GB_swapfile                          file            16777212        0               -2
+            ```
+        3.  `systemctl get-default`
+            ```
+            dtc@ubuntu:~/workspace$ systemctl get-default
+            multi-user.target
+            ```
+        4.  `sudo systemctl status nvargus-daemon.service`
+            ```
+            dtc@ubuntu:~/workspace$ sudo systemctl status nvargus-daemon.service
+            [sudo] dtc のパスワード: 
+            ○ nvargus-daemon.service - Argus daemon
+                 Loaded: loaded (/etc/systemd/system/nvargus-daemon.service; disabled; vendor preset: enabled)
+                 Active: inactive (dead)
+            
+             5月 12 14:44:46 ubuntu systemd[1]: /etc/systemd/system/nvargus-daemon.service:42: Standard output type syslog >
+            ```
+    - **验证结果分析:**
+        - **内存与Swap:** `free -h` 显示内存使用量从GUI模式下的约2.3Gi降低到约806Mi，可用内存显著增加。15Gi的Swap空间 (`/16GB_swapfile`) 已成功激活并被系统识别，当前未使用。
+        - **活动Swap设备:** `swapon -s` 确认 `/16GB_swapfile` 是当前唯一活动的Swap设备，旧的zRAM已不存在。
+        - **默认启动目标:** `systemctl get-default` 确认系统默认启动到 `multi-user.target` (命令行界面)。
+        - **nvargus-daemon服务:** `systemctl status nvargus-daemon.service` 确认该服务处于 `disabled` 和 `inactive (dead)` 状态。
+        - **结论:** 所有RAM优化相关的初步设置 (GUI禁用, nvargus禁用, 新Swap配置) 均已在重启后成功生效。
 
 #### 步骤 2.5: [可选] 进一步禁用不必要的服务
 
@@ -242,8 +313,51 @@
   # sudo systemctl disable snap.cups.cupsd.service
   # ... (其他来自Zenn文章列表中的服务)
   ```
-- **预期影响:** 进一步释放少量内存和系统资源。
-- **记录:** (将在实际操作后记录最终决定禁用哪些服务，执行的命令)
+- **记录 (2025年05月12日 - 禁用可选服务):**
+    - **背景：** 根据 Zenn 博客文章 ([https://zenn.dev/headwaters/articles/jetson-orin-nano-llm](https://zenn.dev/headwaters/articles/jetson-orin-nano-llm)) 的建议，并结合当前Jetson Orin Nano的使用场景（有线网络连接、使用SSH、NVIDIA核心服务以及可能使用Docker），为进一步优化系统资源以运行LLM，禁用了以下被认为非必要的服务。这些服务主要与蓝牙、无线网络、移动调制解调器、VPN以及Snap包管理相关，在当前专注运行LLM的场景下，禁用它们有助于释放系统资源。
+    - **执行的命令 (根据用户提供的终端操作日志概览):**
+      ```bash
+      sudo systemctl disable bluetooth.service
+      sudo systemctl disable ModemManager.service
+      sudo systemctl disable wpa_supplicant.service
+      sudo systemctl disable openvpn.service
+      sudo systemctl disable snapd.apparmor.service
+      sudo systemctl disable snapd.autoimport.service
+      sudo systemctl disable snapd.core-fixup.service
+      sudo systemctl disable snapd.recovery-chooser-trigger.service
+      sudo systemctl disable snapd.seeded.service
+      sudo systemctl disable snapd.service
+      sudo systemctl disable snapd.system-shutdown.service
+      ```
+    - **详细说明与恢复方法：**
+        - **`bluetooth.service`**
+            - **禁用原因：** 系统不计划连接蓝牙设备（如键盘、鼠标等），禁用此服务可以节省资源。这与 Zenn 博文中的建议一致，旨在为LLM运行释放更多资源。
+            - **如何恢复：** `sudo systemctl enable bluetooth.service`
+        - **`ModemManager.service`**
+            - **禁用原因：** 系统使用有线以太网连接，不需要管理移动宽带调制解調器（如3G/4G/5G网卡）。禁用此服务符合 Zenn 博文的优化建议。
+            - **如何恢复：** `sudo systemctl enable ModemManager.service`
+        - **`wpa_supplicant.service`**
+            - **禁用原因：** 系统使用有线以太网连接，不需要 Wi-Fi Protected Access (WPA/WPA2/WPA3) 的客户端支持。禁用此服务符合 Zenn 博文的优化建议。
+            - **如何恢复：** `sudo systemctl enable wpa_supplicant.service`
+        - **`openvpn.service`**
+            - **禁用原因：** 当前系统环境不计划使用 OpenVPN 进行虚拟专用网络连接。禁用此服务符合 Zenn 博文的优化建议。
+            - **如何恢复：** `sudo systemctl enable openvpn.service`
+        - **`snapd.*` 系列服务** (包括 `snapd.apparmor.service`, `snapd.autoimport.service`, `snapd.core-fixup.service`, `snapd.recovery-chooser-trigger.service`, `snapd.seeded.service`, `snapd.service`, `snapd.system-shutdown.service`)
+            - **禁用原因：** 如果不依赖通过 Snap 包管理器安装的应用程序来运行LLM或其相关的开发工具，禁用 Snapd 相关的所有服务可以显著减少后台活动和资源占用。这与 Zenn 博文中的深度优化建议一致。
+            - **如何恢复：** 如果将来需要使用 Snap 包，可以重新启用这些服务。通常，启用核心的 `snapd.service` 和 `snapd.socket` 可能就足够，其他服务会作为依赖被拉起。
+              ```bash
+              sudo systemctl enable snapd.service
+              sudo systemctl enable snapd.socket 
+              # 根据需要也可能要启用以下服务:
+              # sudo systemctl enable snapd.apparmor.service
+              # sudo systemctl enable snapd.autoimport.service
+              # sudo systemctl enable snapd.core-fixup.service
+              # sudo systemctl enable snapd.recovery-chooser-trigger.service
+              # sudo systemctl enable snapd.seeded.service
+              # sudo systemctl enable snapd.system-shutdown.service
+              ```
+              (恢复时，建议先启用 `snapd.service` 和 `snapd.socket`，然后根据具体错误或需求启用其他相关服务，并可能需要重启。)
+    - **重要提示：** 在禁用这些服务后，强烈建议重启系统 (`sudo reboot`)，以确保所有更改完全生效，并仔细验证系统的核心功能（如网络连接、SSH远程访问、以及您计划使用的Docker服务等）是否仍然按预期工作。
 
 **c. [可选] 再次重启系统:**
 
@@ -252,11 +366,157 @@
   sudo reboot
   ```
 - **预期影响:** 使可选服务禁用生效。
-- **记录:** (将在实际操作后记录重启后，再次通过 `free -h` 验证内存使用情况)
+- **记录 (2025年05月12日 - 执行重启):**
+    - 用户已执行 `sudo reboot` 命令。
+
+**d. 重启后系统状态验证及待处理问题 (2025年05月12日):**
+
+- **背景:** 在执行一系列服务禁用操作并重启后，对系统核心功能和服务状态进行验证。
+
+- **1. 核心功能验证结果:**
+    - **内存与 Swap:**
+        - `free -h` 显示：总内存约 7.4Gi，已用约 756Mi，可用约 6.5Gi。Swap 总量 15Gi，已用 0B。
+        - `swapon -s` 显示：`/16GB_swapfile` 是唯一活动的 Swap 设备。
+        - **结论:** 内存占用显著降低，Swap 配置正确，符合预期。
+    - **网络连接 (有线):**
+        - `ip a` 显示：`eth0` 接口 UP 并获得 IP 地址 (例如 `10.204.222.153/24`)。
+        - `ping -c 3 google.com` 显示：成功通讯，0% 丢包。
+        - **结论:** 有线网络连接正常，可访问外部网络。
+    - **SSH 服务:**
+        - `sudo systemctl status ssh` 显示：服务 `active (running)`。
+        - **结论:** SSH 服务运行正常。
+
+- **2. 已禁用服务状态确认 (部分成功):**
+    - **成功禁用的服务 (状态为 `disabled` 且 `inactive (dead)`):**
+        - `bluetooth.service`
+        - `ModemManager.service`
+        - `openvpn.service`
+        - `snapd.apparmor.service`
+        - `snapd.autoimport.service`
+        - `snapd.core-fixup.service`
+        - `snapd.recovery-chooser-trigger.service`
+        - `snapd.seeded.service`
+        - `snapd.service` (及其关联的 `snapd.socket`)
+        - `snapd.system-shutdown.service`
+    - **基本符合禁用预期的服务 (因条件不满足而未启动，状态 `enabled` 但 `inactive (dead)`):**
+        - `ubuntu-advantage.service`
+        - `ua-reboot-cmds.service`
+        - `sssd.service`
+
+- **3. 待处理的问题和观察:**
+    - **a. Docker 服务启动失败:**
+        - **症状:** `sudo systemctl status docker` 显示服务状态为 `failed (Result: exit-code)`。`docker ps` 命令因守护进程未运行而报错权限不足。
+        - **相关日志 (`journalctl -p 3 -xb` 和 `journalctl -u docker.service`):** 系统日志多次记录 "Failed to start Docker Application Container Engine"。具体的 `docker.service` 日志需要进一步分析以确定根本原因 (例如，`sudo journalctl -u docker.service --since "10 minutes ago"` 的输出)。
+        - **临时决定:** 用户当前不急需 Docker，此问题已记录，待将来需要使用 Docker 时再进行详细排查和修复。可能的排查方向包括检查 Docker 配置、依赖项、以及与其他系统服务（如 `containerd.service`）的交互。
+    - **b. `wpa_supplicant.service` 状态异常:**
+        - **症状 (2025-05-12, 首次检查):** `sudo systemctl status wpa_supplicant.service` 显示服务状态为 `Loaded: ... disabled ... Active: active (running)`。
+        - **症状 (2025-05-12, 再次重启后检查):** 状态与首次检查基本一致，仍为 `Loaded: ... disabled ... Active: active (running)`。PID 为 890 (示例)。
+        - **相关日志 (`journalctl -p 3 -xb`):** 记录了 `wpa_supplicant[PID]: nl80211: kernel reports: Registration to specific type not supported` 以及 NetworkManager 相关的 `device (wlan0): Couldn't initialize supplicant interface: Name owner lost`。
+        - **分析:** 尽管服务被设置为 `disabled`，但似乎仍被 NetworkManager 或其他机制尝试激活，但由于内核接口问题未能完全正常工作。由于当前使用有线网络，此问题不影响核心功能。
+        - **用户决定 (2025-05-12):** 用户表示有时可能会使用 Wi-Fi，因此决定暂时保留 `wpa_supplicant.service` 的当前状态，不进一步尝试停止或强制禁用它。尽管其状态为 `disabled` 但 `active (running)` 且日志中存在 `nl80211` 相关报错，但鉴于有线网络工作正常，此服务当前不影响主要操作。
+        - **临时决定:** 已记录此现象和用户决定。此问题在再次重启后依然存在。将来若用户在尝试使用 Wi-Fi 时遇到问题，或希望彻底清理无线相关服务，应回顾此处的记录，并可能需要进一步排查 NetworkManager 配置或 `wpa_supplicant` 的行为。若不再需要 Wi-Fi 功能，届时可尝试 `sudo systemctl stop wpa_supplicant.service` 并观察效果。
+    - **c. 部分建议禁用的服务状态仍为 `enabled` (状态更新于 2025-05-12 第二次重启后检查):**
+        - **`nvweston.service`:**
+            - **旧状态:** `Loaded: ... enabled ... Active: inactive (dead)`.
+            - **新状态 (2025-05-12 第二次重启后):** `Loaded: ... disabled ... Active: inactive (dead)`.
+            - **说明:** 服务已成功禁用。
+        - **`avahi-daemon.service`:**
+            - **旧状态:** `Loaded: ... enabled ... Active: active (running)`.
+            - **新状态 (2025-05-12 第二次重启后):** `Loaded: ... disabled ... Active: inactive (dead)`.
+            - **说明:** 服务已成功停止并禁用。
+        - **`power-profiles-daemon.service`:**
+            - **旧状态:** `Loaded: ... enabled ... Active: inactive (dead)`.
+            - **新状态 (2025-05-12 第二次重启后):** `Loaded: ... disabled ... Active: inactive (dead)`.
+            - **说明:** 服务已成功禁用。
+        - **`switcheroo-control.service`:**
+            - **旧状态:** `Loaded: ... enabled ... Active: inactive (dead)`.
+            - **新状态 (2025-05-12 第二次重启后):** `Loaded: ... disabled ... Active: inactive (dead)`.
+            - **说明:** 服务已成功禁用。
+        - **总结:** 除 `wpa_supplicant.service` 外，之前列出的其他建议禁用的服务在本次检查中均已确认为 `disabled` 和 `inactive (dead)` 状态，表明系统服务优化进展良好。
 
 ### 接下来关注的重点:
 
-- 记录每一步操作的详细输出和遇到的任何问题。
+- 用户已决定暂时不修复 Docker 问题，优先记录当前系统状态。
+- 系统优化已取得显著进展，内存占用降低，Swap配置完成。
+- 若后续需要使用 Docker，需回顾上述记录进行问题排查。
+- 若需进一步精简服务，可处理 `wpa_supplicant.service` 和其他仍标记为 `enabled` 的服务。
+- 继续 Zenn 博客文章的后续步骤，例如 "3. text-generation-webui で LLM をロードする"。
+
+---
+
+## 日期: 2025年05月12日 (续)
+
+### 博客步骤/当前目标:
+
+- 排查并修复之前遇到的 Docker 服务启动失败问题。
+- 解决普通用户 `dtc` 无法执行 `docker` 命令的权限问题。
+
+### Docker 服务故障排查与修复:
+
+**1. 问题现象回顾:**
+   - 在系统优化并重启后，尝试使用 `docker` 相关命令（如 `docker ps`）时，非 root 用户 `dtc` 遇到 `permission denied while trying to connect to the Docker daemon socket` 错误。
+   - 使用 `sudo systemctl status docker` 检查服务状态，显示为 `inactive (dead)` 或 `failed`。
+
+**2. 诊断过程 (执行命令及关键输出):**
+   - `sudo systemctl restart docker` 后 `sudo systemctl status docker | cat`:
+     - 服务状态显示为 `active (running)`，表明服务已成功启动。
+   - `sudo journalctl -u docker.service -n 100 --no-pager`:
+     - 日志显示之前的多次启动失败，根本原因为 iptables 规则添加失败:
+       ```
+       failed to start daemon: Error initializing network controller: ... unable to add return rule in DOCKER-ISOLATION-STAGE-1 chain:  (iptables failed: iptables v1.8.7 (nf_tables):  RULE_APPEND failed (No such file or directory): rule in chain DOCKER-ISOLATION-STAGE-1
+       ```
+     - 但日志末尾显示服务已成功启动。
+   - `sudo systemctl status containerd | cat` 及 `sudo journalctl -u containerd.service -n 50 --no-pager`:
+     - `containerd` 服务状态正常 (`active (running)`), 日志无明显错误。
+   - `sudo cat /etc/docker/daemon.json`:
+     - 配置文件内容正常，包含 NVIDIA runtime 配置。
+
+**3. 修复结论:**
+   - Docker 服务本身已恢复正常运行。之前的 iptables 问题似乎已自动解决或因其他操作间接修复。
+
+### Docker 用户权限配置:
+
+**1. 问题:**
+   - 即便 Docker 服务已恢复运行，用户 `dtc` 仍无法直接执行 `docker` 命令（如 `docker ps`），报错 `permission denied while trying to connect to the Docker daemon socket`，需要 `sudo` 才能执行。
+
+**2. 排查与尝试过程 (详细):**
+   - **步骤 2.1: 将用户添加到 `docker` 组 (已执行)**
+     ```bash
+     sudo usermod -aG docker dtc
+     ```
+   - **步骤 2.2: 尝试在当前会话应用新组权限 (未生效)**
+     ```bash
+     newgrp docker
+     ```
+     - **结果:** 执行 `docker ps` 后，仍然出现 `permission denied` 错误。`newgrp` 会启动一个子 shell，但可能并未完全继承或应用到当前环境所需的所有变量或设置，或者对于 Docker Socket 的访问权限生效机制，仅靠 `newgrp` 不足。
+   - **步骤 2.3: 完全退出 SSH 并重新登录 (未生效)**
+     - **操作:** 用户断开 SSH 连接，然后重新登录。
+     - **结果:** 执行 `docker ps` 后，依然是 `permission denied` 错误。这排除了 SSH 会话缓存旧权限的可能性，说明问题根源更深。
+   - **步骤 2.4: 深入检查权限配置 (确认配置正确)**
+     - **检查用户组成员 (`id dtc`):** 确认 `groups=...,994(docker)`，用户 `dtc` **确实** 在 `docker` 组 (GID 994) 中。
+     - **检查组信息 (`getent group docker`):** 确认 `docker:x:994:dtc`，`docker` 组存在且 `dtc` 是成员。
+     - **检查 Socket 权限 (`ls -l /var/run/docker.sock`):** 确认权限为 `srw-rw---- 1 root docker ...`，所有者是 `root`，组是 `docker`，并且组具有读写权限 (`rw`)。配置完全符合预期。
+   - **步骤 2.5: 再次尝试强制应用权限和检查其他因素 (未解决)**
+     - **确认 Docker 服务状态 (`sudo systemctl status docker | cat`):** 服务 `active (running)`。
+     - **强制重新应用 Socket 权限 (`sudo chgrp docker /var/run/docker.sock && sudo chmod g+rw /var/run/docker.sock`):** 命令执行成功，但 `docker ps` 依然失败。
+     - **检查 AppArmor (`sudo aa-status | cat`):** 显示 `apparmor not present.`，排除 AppArmor 干扰。
+     - **尝试 `docker info`:** 同样报 `permission denied` 错误。
+
+**3. 分析与结论:**
+   - 所有常规的权限配置检查（用户组成员、Socket 文件权限）均显示**正确无误**。
+   - 尝试的即时生效方法（`newgrp`）和标准生效方法（重新登录 SSH）都**未能解决**问题。
+   - 强制应用权限和检查 AppArmor 也未发现异常。
+   - 这种情况非常罕见，暗示可能存在更深层次的系统状态问题或某些服务间的潜在冲突，导致即使用户组权限设置正确，守护进程的 Socket 仍然无法被非 root 用户访问。
+
+**4. 最终解决方案与验证:**
+   - **操作:** 用户执行 `sudo reboot` **重启了整个 Jetson 系统**。
+   - **结果:** 重启后，重新登录 SSH，用户 `dtc` 直接执行 `docker ps` 和 `docker info` 命令 **成功**，不再出现权限错误。
+   - **最终结论:** 尽管具体原因不明，但**系统重启**彻底清除了可能存在的任何残留状态或冲突，完全应用了用户组的更改，最终解决了 Docker 的用户权限问题。Docker 环境现已对用户 `dtc` 完全可用。
+
+### 下一步:
+
+- Docker 服务和用户权限均已修复。
+- 继续执行 Zenn 博客第三部分的 `jetson-containers` 相关步骤。
 
 ---
 
